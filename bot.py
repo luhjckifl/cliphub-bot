@@ -400,8 +400,7 @@ class SubmissionReviewView(discord.ui.View):
 
 @bot.event
 async def on_ready():
-    guild = discord.Object(1349487425814266006)
-    await bot.tree.sync(guild=guild)
+    await bot.tree.sync(guild=discord.Object(1349487425814266006))
     bot.add_view(DashboardView())
     print(f"✅ Logged in as {bot.user}")
 
@@ -643,13 +642,10 @@ async def inspiration(
 
 # ---------------- CREATE DASHBOARD MESSAGE ---------------- #
 
-@bot.tree.command(
-    name="create-dashboard",
-    description="Create the Clip.Hub dashboard (Admin only)",
-    guild=discord.Object(id=SERVER_ID)
-)
+@bot.tree.command(name="create-dashboard", guild=discord.Object(id=SERVER_ID))
 async def create_dashboard(interaction: discord.Interaction):
 
+    # Admin only
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
             "❌ Admin only.",
@@ -661,16 +657,16 @@ async def create_dashboard(interaction: discord.Interaction):
         title="✨ Welcome to your Clip.Hub Dashboard",
         description=(
             "Use the options below to manage everything:\n\n"
-            "📊 **Dashboard** – Track your posts, views, and earnings\n"
-            "📤 **Submit Content** – Send your clips to active campaigns\n"
-            "💳 **Payment Methods** – Choose how you want to get paid\n"
-            "💰 **Request Payout** – Request a payout from your balance\n"
-            "🎬 **Submit Clip** – Get feedback on campaign videos"
+            "📊 **Dashboard** – Track your submissions and statuses\n"
+            "📤 **Submit Content** – Send your clips for review\n"
         ),
         color=discord.Color.blurple()
     )
 
-    await interaction.channel.send(embed=embed, view=DashboardView())
+    await interaction.channel.send(
+        embed=embed,
+        view=DashboardView()
+    )
 
     await interaction.response.send_message(
         "✅ Dashboard created!",
