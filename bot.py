@@ -124,7 +124,7 @@ class PayoutModal(discord.ui.Modal, title="Request Payout"):
             await payout_channel.send(
                 f"💰 **New Payout Request**\n"
                 f"User: {interaction.user.mention}\n"
-                f"Amount: \${self.amount}"
+                f"Amount: ${self.amount}"
             )
 
         await interaction.response.send_message("✅ Payout request submitted!", ephemeral=True)
@@ -155,7 +155,7 @@ class DashboardView(discord.ui.View):
         )
 
         embed.add_field(name="🎬 Total Submissions", value=str(total_submissions), inline=False)
-        embed.add_field(name="💰 Total Earnings", value=f"\${total_earnings}", inline=False)
+        embed.add_field(name="💰 Total Earnings", value=f"${total_earnings}", inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -314,7 +314,7 @@ async def campaigns(interaction: discord.Interaction):
         message += (
             f"**{campaign[0]}**\n"
             f"{campaign[1]}\n"
-            f"💰 Reward: ${campaign[2]} per clip\n\n"
+            f"💰 Reward: {campaign[2]} per clip\n\n"
         )
 
     await interaction.response.send_message(message)
@@ -436,7 +436,7 @@ async def profile(interaction: discord.Interaction):
         await interaction.response.send_message(
             f"👤 **{interaction.user.name}'s Profile**\n\n"
             f"🎬 Total Submissions: {total_submissions}\n"
-            f"💰 Total Earnings: ${total_earnings}"
+            f"💰 Total Earnings: {total_earnings}"
         )
 
     except Exception as e:
