@@ -275,7 +275,7 @@ async def on_ready():
     description="Create a campaign (Admin only)",
     guild=discord.Object(id=SERVER_ID)
 )
-@app_commands.describe(name="Campaign name", description="Description", reward="Reward per clip")
+@app_commands.describe(name="Campaign name", description="Description", reward="Reward per views")
 async def create_campaign(interaction: discord.Interaction, name: str, description: str, reward: float):
 
     if not interaction.user.guild_permissions.administrator:
@@ -284,7 +284,7 @@ async def create_campaign(interaction: discord.Interaction, name: str, descripti
 
     try:
         cursor.execute(
-            "INSERT INTO campaigns (name, description, reward_per_clip) VALUES (?, ?, ?)",
+            "INSERT INTO campaigns (name, description, reward_per_views) VALUES (?, ?, ?)",
             (name, description, reward)
         )
         conn.commit()
@@ -301,7 +301,7 @@ async def create_campaign(interaction: discord.Interaction, name: str, descripti
 )
 async def campaigns(interaction: discord.Interaction):
 
-    cursor.execute("SELECT name, description, reward_per_clip FROM campaigns WHERE active=1")
+    cursor.execute("SELECT name, description, reward_per_views FROM campaigns WHERE active=1")
     results = cursor.fetchall()
 
     if not results:
@@ -314,7 +314,7 @@ async def campaigns(interaction: discord.Interaction):
         message += (
             f"**{campaign[0]}**\n"
             f"{campaign[1]}\n"
-            f"💰 Reward: {campaign[2]} per clip\n\n"
+            f"💰 Reward: {campaign[2]} per views\n\n"
         )
 
     await interaction.response.send_message(message)
@@ -520,23 +520,21 @@ async def create_dashboard(interaction: discord.Interaction):
         )
         return
 
-    view = DashboardView()
+    embed = discord.Embed(
+        title="✨ Welcome to your Clip.Hub Dashboard",
+        description=(
+            "Use the options below to manage everything:\n\n"
+            "📊 **Dashboard** – Track your posts, views, and earnings\n"
+            "📤 **Submit Content** – Send your clips to active campaigns\n"
+            "💳 **Payment Methods** – Choose how you want to get paid\n"
+            "💰 **Request Payout** – Request a payout from your balance\n"
+            "🎬 **Submit Clip** – Get feedback on campaign videos"
+        ),
+        color=discord.Color.blurple()
+    )
 
-   embed = discord.Embed(
-    title="✨ Welcome to your Clip.Hub Dashboard",
-    description=(
-        "Use the options below to manage everything:\n\n"
-        "📊 **Dashboard** – Track your posts, views, and earnings\n"
-        "📤 **Submit Content** – Send your clips to active campaigns\n"
-        "💳 **Payment Methods** – Choose how you want to get paid\n"
-        "💰 **Request Payout** – Request a payout from your balance\n"
-        "🎬 **Submit Clip** – Get feedback on campaign videos"
-    ),
-    color=discord.Color.blurple()
-)
+    await interaction.channel.send(embed=embed, view=DashboardView())
 
-await interaction.channel.send(embed=embed, view=DashboardView())
-    
     await interaction.response.send_message(
         "✅ Dashboard created!",
         ephemeral=True
