@@ -53,6 +53,124 @@ CREATE TABLE IF NOT EXISTS submissions (
 )
 """)
 
+# ---------------- SUBMISSIONS TABLE ---------------- #
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS submissions (
+    submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT,
+    link TEXT,
+    note TEXT,
+    status TEXT DEFAULT 'pending',
+    admin_note TEXT DEFAULT '',
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+# ---------------- PAYMENT TABLES ---------------- #
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS payment_methods (
+    discord_id TEXT PRIMARY KEY,
+    method TEXT,
+    details TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS payout_requests (
+    request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT,
+    amount REAL,
+    status TEXT DEFAULT 'pending'
+)
+""")
+
+conn.commit()
+
+class SubmitClipModal(discord.ui.Modal, title="Submit Clip"):
+
+    link = discord.ui.TextInput(label="Paste Video Link", required=True)
+    note = discord.ui.TextInput(label="Optional Note", style=discord.TextStyle.paragraph, required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        cursor.execute(
+            "INSERT INTO submissions (discord_id, link, note) VALUES (?, ?, ?)",
+            (str(interaction.user.id), self.link, self.note)
+        )
+        conn.commit()
+
+        submission_id = cursor.lastrowid
+
+        review_channel = discord.utils.get(interaction.guild.text_channels, name="clip-submissions")
+
+        if review_channel:
+            view = AdminReviewView(submission_id)
+
+            await review_channel.send(
+                f"🎬 **New Submission**\n"
+                f"User: {interaction.user.mention}\n"
+                f"Link: {self.link}\n"
+                f"Note: {self.note or 'None'}\n"
+                f"Status: Pending",
+                view=view
+            )
+
+        await interaction.response.send_message("✅ Submission sent!", ephemeral=True)
+
+class AdminReviewView(discord.ui.View):
+    def __init__(self, submission_id):
+        super().__init__(timeout=None)
+        self.submission_id = submission_id
+
+class AdminNoteModal(discord.ui.Modal, title="Add Admin Note"):
+
+    def __init__(self, submission_id):
+        super().__init__()
+        self.submission_id = submission_id
+
+    note = discord.ui.TextInput(
+        label="Enter note",
+        style=discord.TextStyle.paragraph
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        cursor.execute(
+            "UPDATE submissions SET admin_note=? WHERE submission_id=?",
+            (self.note, self.submission_id)
+        )
+        conn.commit()
+
+        await interaction.response.send_message("✅ Note added.", ephemeral=True)
+
+    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.success)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        cursor.execute(
+            "UPDATE submissions SET status='approved' WHERE submission_id=?",
+            (self.submission_id,)
+        )
+        conn.commit()
+
+        await interaction.message.edit(content="✅ Submission Approved", view=None)
+
+    @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger)
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        cursor.execute(
+            "UPDATE submissions SET status='rejected' WHERE submission_id=?",
+            (self.submission_id,)
+        )
+        conn.commit()
+
+        await interaction.message.edit(content="❌ Submission Rejected", view=None)
+
+    @discord.ui.button(label="📝 Add Note", style=discord.ButtonStyle.primary)
+    async def add_note(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(AdminNoteModal(self.submission_id))
+
 # ---------------- PAYMENT TABLES ---------------- #
 
 cursor.execute("""
@@ -179,12 +297,31 @@ class DashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="📊 Dashboard", style=discord.ButtonStyle.primary)
-    async def dashboard(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "📊 Your dashboard stats will appear here soon.",
-            ephemeral=True
-        )
+@discord.ui.button(label="📊 Dashboard", style=discord.ButtonStyle.primary)
+async def dashboard(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+    cursor.execute(
+        "SELECT link, status, admin_note FROM submissions WHERE discord_id=? ORDER BY submitted_at DESC",
+        (str(interaction.user.id),)
+    )
+    submissions = cursor.fetchall()
+
+    embed = discord.Embed(
+        title="📊 Your Submitted Clips",
+        color=discord.Color.blurple()
+    )
+
+    if submissions:
+        for sub in submissions[:5]:
+            embed.add_field(
+                name=f"Status: {sub[1].capitalize()}",
+                value=f"{sub[0]}\nAdmin Note: {sub[2] or 'None'}",
+                inline=False
+            )
+    else:
+        embed.description = "You haven't submitted any clips yet."
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="📤 Submit Content", style=discord.ButtonStyle.secondary)
     async def submit_content(self, interaction: discord.Interaction, button: discord.ui.Button):
