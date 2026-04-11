@@ -53,6 +53,124 @@ CREATE TABLE IF NOT EXISTS submissions (
 )
 """)
 
+# ---------------- PAYMENT TABLES ---------------- #
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS payment_methods (
+    discord_id TEXT PRIMARY KEY,
+    method TEXT,
+    details TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS payout_requests (
+    request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT,
+    amount REAL,
+    status TEXT DEFAULT 'pending'
+)
+""")
+
+class SubmitClipModal(discord.ui.Modal, title="Submit Clip"):
+
+    link = discord.ui.TextInput(label="Paste Video Link", required=True)
+    note = discord.ui.TextInput(label="Optional Note", style=discord.TextStyle.paragraph, required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        review_channel = discord.utils.get(interaction.guild.text_channels, name="clip-submissions")
+
+        if review_channel:
+            await review_channel.send(
+                f"🎬 **New Submission**\n"
+                f"User: {interaction.user.mention}\n"
+                f"Link: {self.link}\n"
+                f"Note: {self.note or 'None'}"
+            )
+
+        await interaction.response.send_message("✅ Submission sent!", ephemeral=True)
+
+class PaymentModal(discord.ui.Modal, title="Payment Method"):
+
+    method = discord.ui.TextInput(label="Method (PayPal, Cash App, Venmo, Crypto)", required=True)
+    details = discord.ui.TextInput(label="Enter your payment details", style=discord.TextStyle.paragraph)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        cursor.execute(
+            "INSERT OR REPLACE INTO payment_methods (discord_id, method, details) VALUES (?, ?, ?)",
+            (str(interaction.user.id), self.method, self.details)
+        )
+        conn.commit()
+
+        await interaction.response.send_message("✅ Payment method saved!", ephemeral=True)
+
+class PayoutModal(discord.ui.Modal, title="Request Payout"):
+
+    amount = discord.ui.TextInput(label="Enter payout amount", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        cursor.execute(
+            "INSERT INTO payout_requests (discord_id, amount) VALUES (?, ?)",
+            (str(interaction.user.id), float(self.amount))
+        )
+        conn.commit()
+
+        payout_channel = discord.utils.get(interaction.guild.text_channels, name="payouts")
+
+        if payout_channel:
+            await payout_channel.send(
+                f"💰 **New Payout Request**\n"
+                f"User: {interaction.user.mention}\n"
+                f"Amount: \${self.amount}"
+            )
+
+        await interaction.response.send_message("✅ Payout request submitted!", ephemeral=True)
+
+class DashboardView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📊 Dashboard", style=discord.ButtonStyle.primary)
+    async def dashboard(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        cursor.execute(
+            "SELECT COUNT(*) FROM submissions WHERE discord_id=?",
+            (str(interaction.user.id),)
+        )
+        total_submissions = cursor.fetchone()[0]
+
+        cursor.execute(
+            "SELECT total_earnings FROM users WHERE discord_id=?",
+            (str(interaction.user.id),)
+        )
+        result = cursor.fetchone()
+        total_earnings = result[0] if result else 0
+
+        embed = discord.Embed(
+            title="📊 Your Clip.Hub Dashboard",
+            color=discord.Color.blurple()
+        )
+
+        embed.add_field(name="🎬 Total Submissions", value=str(total_submissions), inline=False)
+        embed.add_field(name="💰 Total Earnings", value=f"\${total_earnings}", inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="📤 Submit Content", style=discord.ButtonStyle.primary)
+    async def submit_content(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(SubmitClipModal())
+
+    @discord.ui.button(label="💳 Payment Methods", style=discord.ButtonStyle.primary)
+    async def payment_methods(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(PaymentModal())
+
+    @discord.ui.button(label="💰 Request Payout", style=discord.ButtonStyle.primary)
+    async def request_payout(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(PayoutModal())
+
 conn.commit()
 
 # ---------------- DASHBOARD VIEW ---------------- #
@@ -404,18 +522,21 @@ async def create_dashboard(interaction: discord.Interaction):
 
     view = DashboardView()
 
-    message = (
-        "**Welcome to your Clip.Hub Dashboard.**\n\n"
+   embed = discord.Embed(
+    title="✨ Welcome to your Clip.Hub Dashboard",
+    description=(
         "Use the options below to manage everything:\n\n"
-        "📊 Dashboard – Track your posts, views, and earnings\n"
-        "📤 Submit Content – Send your clips to active campaigns\n"
-        "💳 Payment Methods – Choose how you want to get paid\n"
-        "💰 Request Payout – Request a payout from your balance\n"
-        "🎬 Submit Clip – Get feedback on videos promoting campaigns"
-    )
+        "📊 **Dashboard** – Track your posts, views, and earnings\n"
+        "📤 **Submit Content** – Send your clips to active campaigns\n"
+        "💳 **Payment Methods** – Choose how you want to get paid\n"
+        "💰 **Request Payout** – Request a payout from your balance\n"
+        "🎬 **Submit Clip** – Get feedback on campaign videos"
+    ),
+    color=discord.Color.blurple()
+)
 
-    await interaction.channel.send(message, view=view)
-
+await interaction.channel.send(embed=embed, view=DashboardView())
+    
     await interaction.response.send_message(
         "✅ Dashboard created!",
         ephemeral=True
